@@ -203,5 +203,6 @@ in
   # which sets LD_LIBRARY_PATH and others correctly.
   cabal-wrapper
   pkgs.haskellPackages.implicit-hie
+  pkgs.cabal2nix
 ]
 ++ c-lib-out-deps # Required to run HLS
