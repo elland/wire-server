@@ -51,6 +51,7 @@ import Wire.API.Routes.Named
 import Wire.API.Routes.Public
 import Wire.API.Routes.Public.Util
 import Wire.API.Routes.QualifiedCapture
+import Wire.API.Routes.Version
 import Wire.API.ServantProto (Proto, RawProto)
 import Wire.API.Team
 import Wire.API.Team.Conversation
@@ -248,7 +249,7 @@ type ConversationAPI =
                :> Description
                     "Will not return remote conversations.\n\n\
                     \Use `POST /conversations/list-ids` followed by \
-                    \`POST /conversations/list/v2` instead."
+                    \`POST /conversations/list` instead."
                :> ZLocalUser
                :> "conversations"
                :> QueryParam'
@@ -275,12 +276,23 @@ type ConversationAPI =
                :> Get '[Servant.JSON] (ConversationList Conversation)
            )
     :<|> Named
-           "list-conversations"
+           "list-conversations-v1"
            ( Summary "Get conversation metadata for a list of conversation ids"
+               :> Until 'V2
                :> ZLocalUser
                :> "conversations"
                :> "list"
                :> "v2"
+               :> ReqBody '[Servant.JSON] ListConversations
+               :> Post '[Servant.JSON] ConversationsResponse
+           )
+    :<|> Named
+           "list-conversations"
+           ( Summary "Get conversation metadata for a list of conversation ids"
+               :> From 'V2
+               :> ZLocalUser
+               :> "conversations"
+               :> "list"
                :> ReqBody '[Servant.JSON] ListConversations
                :> Post '[Servant.JSON] ConversationsResponse
            )
@@ -352,6 +364,7 @@ type ConversationAPI =
     :<|> Named
            "add-members-to-conversation-unqualified"
            ( Summary "Add members to an existing conversation (deprecated)"
+               :> Until 'V2
                :> CanThrow ('ActionDenied 'AddConversationMember)
                :> CanThrow ('ActionDenied 'LeaveConversation)
                :> CanThrow 'ConvNotFound
@@ -370,8 +383,9 @@ type ConversationAPI =
                :> MultiVerb 'POST '[JSON] ConvUpdateResponses (UpdateResult Event)
            )
     :<|> Named
-           "add-members-to-conversation"
+           "add-members-to-conversation-unqualified2"
            ( Summary "Add qualified members to an existing conversation."
+               :> Until 'V2
                :> CanThrow ('ActionDenied 'AddConversationMember)
                :> CanThrow ('ActionDenied 'LeaveConversation)
                :> CanThrow 'ConvNotFound
@@ -387,6 +401,27 @@ type ConversationAPI =
                :> Capture "cnv" ConvId
                :> "members"
                :> "v2"
+               :> ReqBody '[Servant.JSON] InviteQualified
+               :> MultiVerb 'POST '[Servant.JSON] ConvUpdateResponses (UpdateResult Event)
+           )
+    :<|> Named
+           "add-members-to-conversation"
+           ( Summary "Add qualified members to an existing conversation."
+               :> From 'V2
+               :> CanThrow ('ActionDenied 'AddConversationMember)
+               :> CanThrow ('ActionDenied 'LeaveConversation)
+               :> CanThrow 'ConvNotFound
+               :> CanThrow 'InvalidOperation
+               :> CanThrow 'TooManyMembers
+               :> CanThrow 'ConvAccessDenied
+               :> CanThrow 'NotATeamMember
+               :> CanThrow 'NotConnected
+               :> CanThrow 'MissingLegalholdConsent
+               :> ZLocalUser
+               :> ZConn
+               :> "conversations"
+               :> QualifiedCapture "cnv" ConvId
+               :> "members"
                :> ReqBody '[Servant.JSON] InviteQualified
                :> MultiVerb 'POST '[Servant.JSON] ConvUpdateResponses (UpdateResult Event)
            )
