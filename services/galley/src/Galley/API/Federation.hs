@@ -22,7 +22,7 @@ import Control.Lens (itraversed, (<.>))
 import Data.ByteString.Conversion (toByteString')
 import Data.Containers.ListUtils (nubOrd)
 import Data.Domain (Domain)
-import Data.Id (ConvId, UserId)
+import Data.Id
 import Data.Json.Util (Base64ByteString (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.Map as Map
@@ -37,6 +37,7 @@ import Galley.API.Action
 import Galley.API.Error
 import qualified Galley.API.Mapping as Mapping
 import Galley.API.Message
+import Galley.API.Push
 import Galley.API.Util
 import Galley.App
 import qualified Galley.Data.Conversation as Data
@@ -83,6 +84,7 @@ federationSitemap =
     :<|> Named @"on-message-sent" onMessageSent
     :<|> Named @"send-message" sendMessage
     :<|> Named @"on-user-deleted-conversations" onUserDeleted
+    :<|> Named @"mls-receive-welcome" mlsReceiveWelcome
 
 onConversationCreated ::
   Members
@@ -417,3 +419,31 @@ onUserDeleted origDomain udcn = do
                   botsAndMembers = convBotsAndMembers conv
               void $ notifyConversationAction (sing @'ConversationLeaveTag) untaggedDeletedUser Nothing lc botsAndMembers action
   pure EmptyResponse
+
+mlsReceiveWelcome ::
+  Members
+    '[ GundeckAccess,
+       Input (Local ()),
+       Input UTCTime
+     ]
+    r =>
+  Domain ->
+  F.MLSWelcomeRequest ->
+  Sem r EmptyResponse
+mlsReceiveWelcome _origDomain (F.MLSWelcomeRequest rawWelcome rcpts) = do
+  let lclients = F.unMLSWelRecipient <$> rcpts
+  loc <- input @(Local ())
+  now <- input @UTCTime
+  -- TODO(md): The 'Nothing' argument to runMessagePush should be 'Just qConvId'
+  -- for a qualified conversation ID corresponding to the conversation
+  runMessagePush loc Nothing $
+    foldMap (uncurry $ mkPush loc now) lclients
+  pure EmptyResponse
+  where
+    mkPush :: Local x -> UTCTime -> UserId -> ClientId -> MessagePush 'Broadcast
+    mkPush l time u c =
+      -- FUTUREWORK: use the conversation ID stored in the key package mapping table
+      let lcnv = qualifyAs l (Data.selfConv u)
+          lusr = qualifyAs l u
+          e = Event (qUntagged lcnv) (qUntagged lusr) time $ EdMLSWelcome rawWelcome
+       in newMessagePush l () Nothing defMessageMetadata (u, c) e

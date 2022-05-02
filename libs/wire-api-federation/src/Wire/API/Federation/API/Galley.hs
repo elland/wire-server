@@ -18,11 +18,13 @@
 module Wire.API.Federation.API.Galley where
 
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Id (ClientId, ConvId, UserId)
-import Data.Json.Util (Base64ByteString)
+import Data.Id
+import Data.Json.Util
 import Data.Misc (Milliseconds)
 import Data.Qualified
 import Data.Range
+import Data.Schema
+import qualified Data.Swagger as S
 import Data.Time.Clock (UTCTime)
 import Imports
 import Servant.API
@@ -57,6 +59,10 @@ type GalleyApi =
     -- this backend
     :<|> FedEndpoint "send-message" MessageSendRequest MessageSendResponse
     :<|> FedEndpoint "on-user-deleted-conversations" UserDeletedConversationsNotification EmptyResponse
+    :<|> GalleyMLSAPI
+
+type GalleyMLSAPI =
+  FedEndpoint "mls-receive-welcome" MLSWelcomeRequest EmptyResponse
 
 data GetConversationsRequest = GetConversationsRequest
   { gcrUserId :: UserId,
@@ -229,3 +235,40 @@ data UserDeletedConversationsNotification = UserDeletedConversationsNotification
   deriving stock (Eq, Show, Generic)
   deriving (Arbitrary) via (GenericUniform UserDeletedConversationsNotification)
   deriving (FromJSON, ToJSON) via (CustomEncoded UserDeletedConversationsNotification)
+
+data MLSWelcomeRequest = MLSWelcomeRequest
+  { mwrRawWelcome :: ByteString,
+    -- | These are qualified implicitly by the target domain
+    mwrRecipients :: [MLSWelcomeRecipient]
+  }
+  deriving stock (Generic)
+  deriving (Arbitrary) via (GenericUniform MLSWelcomeRequest)
+  deriving (FromJSON, ToJSON, S.ToSchema) via (Schema MLSWelcomeRequest)
+
+instance ToSchema MLSWelcomeRequest where
+  schema = undefined
+
+-- object "MLSWelcomeRequest" $
+--   MLSWelcomeRequest
+--     <$> mwrRawWelcome .= field "welcome-message" base64Schema
+--     <*> mwrRecipients .= field "recipients" (array schema)
+
+newtype MLSWelcomeRecipient = MLSWelcomeRecipient {unMLSWelRecipient :: (UserId, ClientId)}
+  deriving stock (Generic)
+  deriving (Arbitrary) via (GenericUniform MLSWelcomeRecipient)
+  deriving (FromJSON, ToJSON, S.ToSchema) via Schema MLSWelcomeRecipient
+
+instance ToSchema MLSWelcomeRecipient where
+  schema =
+    undefined
+
+--   object
+--   "MLSWelcomeRecipient"
+--   $ MLSWelcomeRecipient
+--     <$> unMLSWelRecipient .= unnamed schemaPair
+-- where
+--   schemaPair :: SchemaP NamedSwaggerDoc Object [Pair] (UserId, ClientId) (UserId, ClientId)
+--   schemaPair =
+--     (,)
+--       <$> fmap fst .= field "user_id" schema
+--       <*> fmap snd .= field "client_id" schema
