@@ -236,7 +236,7 @@ type ConversationAPI =
                     \ this fashion until all results are returned, which is indicated by\
                     \ `has_more` being `false`. Note that `paging_state` should be\
                     \ considered an opaque token. It should not be inspected, or stored, or\
-                    \ reused across multiple unrelated invokations of the endpoint."
+                    \ reused across multiple unrelated invocations of the endpoint."
                :> ZLocalUser
                :> "conversations"
                :> "list-ids"
