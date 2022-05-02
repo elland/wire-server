@@ -20,6 +20,8 @@ module Brig.Data.MLS.KeyPackage
     claimKeyPackage,
     countKeyPackages,
     derefKeyPackage,
+    keyPackageRefConvId,
+    keyPackageRefSetConvId,
   )
 where
 
@@ -91,6 +93,22 @@ derefKeyPackage ref = do
   where
     q :: PrepQuery R (Identity KeyPackageRef) (Domain, UserId, ClientId)
     q = "SELECT domain, user, client from mls_key_package_refs WHERE ref = ?"
+
+keyPackageRefConvId :: MonadClient m => KeyPackageRef -> MaybeT m (Qualified ConvId)
+keyPackageRefConvId ref = do
+  ( domain, lid ) <- MaybeT . retry x1 $ query1 q (params LocalQuorum (Identity ref))
+  pure $ Qualified { qDomain = domain, qUnqualified = lid }
+  where
+    q :: PrepQuery R (Identity KeyPackageRef) (Domain, ConvId)
+    q = "SELECT conv_domain, conv FROM mls_key_package_refs WHERE ref = ?"
+
+-- We want to proper update, not an upsert, to avoid "ghost" refs without user+client
+keyPackageRefSetConvId :: MonadClient m => KeyPackageRef -> Qualified ConvId -> m ()
+keyPackageRefSetConvId ref convId = do
+  retry x5 $ write q (params LocalQuorum (qDomain convId, qUnqualified convId, ref))
+  where
+    q :: PrepQuery W (Domain, ConvId, KeyPackageRef) ()
+    q = "UPDATE mls_key_package_refs SET domain = ?, conv = ? WHERE ref = ? IF EXISTS"
 
 --------------------------------------------------------------------------------
 -- Utilities
